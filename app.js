@@ -129,7 +129,7 @@ function liveFor(s) {
   const day = DAYS[(new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7];
   const slot = Math.floor((hh * 60 + mm) / 15);
   const typ = s.prof?.[day]?.[slot];
-  return { pct: c.percentageOfBaseline, typ, ratio: typ > 0.005 ? c.percentageOfBaseline / typ : null, slot, day, timeLocal: t.slice(0, 5), ageMin };
+  return { pct: c.percentageOfBaseline, typ, ratio: typ > 0.005 && c.percentageOfBaseline > 0 ? c.percentageOfBaseline / typ : null, zero: !(c.percentageOfBaseline > 0), slot, day, timeLocal: t.slice(0, 5), ageMin };
 }
 function busy(s, day = S.day, slot = S.slot) {
   const daily = s.daily?.[DTYPE[day]];
@@ -236,7 +236,7 @@ function stationTip(s) {
     if (b.flow != null) h += `≈ ${n(b.flow)} taps / 15 min now vs ≈ ${n(b.typFlow)} typical<br>`;
   } else if (b.kind === 'typical') {
     h += `<span style="color:#ffb547">TYPICAL ${esc(when)}</span>${b.typFlow != null ? ` · ≈ ${n(b.typFlow)} taps / 15 min` : ''}<br>`;
-    if (b.liveRaw) h += `<span class="muted">live reading too low to compare</span><br>`;
+    if (b.liveRaw) h += `<span class="muted">${b.liveRaw.zero ? 'TfL live reading is 0% (station closed or no data), so typical shown' : 'live reading not comparable at this hour'}</span><br>`;
     else if (S.followNow && s.lu) h += `<span class="muted">${S.crowd.has(s.lu) ? 'no live reading from TfL right now' : 'live reading not fetched yet'}</span><br>`;
   } else {
     h += `<span class="muted">No 15-min profile from TfL for this station.</span><br>${b.daily ? `Typical ${DAYNAME[S.day]}: ${n(b.daily)} entries+exits/day<br>` : ''}`;
@@ -469,20 +469,33 @@ function startCrowd() { crowdSweep(); sweepAt = Date.now(); crowdTimer = setInte
 // ---------- Wikipedia: live stream + coordinate lookups + seeds ----------
 function startWiki() {
   const W = S.wiki;
-  let es;
-  const connect = () => {
-    try { es = new EventSource('https://stream.wikimedia.org/v2/stream/recentchange'); }
-    catch (e) { S.errors.wiki = e.message; return; }
-    es.onopen = () => { W.connected = true; S.errors.wiki = null; };
-    es.onerror = () => { W.connected = false; if (es.readyState === 2) { S.errors.wiki = 'stream closed, retrying'; setTimeout(connect, 10000); } };
-    es.onmessage = ev => {
-      let d; try { d = JSON.parse(ev.data); } catch { return; }
-      if (d.wiki !== 'enwiki' || d.namespace !== 0 || (d.type !== 'edit' && d.type !== 'new')) return;
-      W.seen++;
-      W.pending.set(d.title, d);
-    };
+  // Read the SSE stream with fetch (resumes with ?since= after a dropped connection, so no gap and no noisy reconnects)
+  let lastDt = null;
+  const handle = d => {
+    if (d.meta?.dt) lastDt = d.meta.dt;
+    if (d.wiki !== 'enwiki' || d.namespace !== 0 || (d.type !== 'edit' && d.type !== 'new')) return;
+    W.seen++; W.pending.set(d.title, d);
   };
-  connect();
+  (async function loop() {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const r = await fetch('https://stream.wikimedia.org/v2/stream/recentchange' + (lastDt ? '?since=' + encodeURIComponent(lastDt) : ''), { headers: { Accept: 'text/event-stream' }, cache: 'no-store' });
+        if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
+        W.connected = true; S.errors.wiki = null; attempt = 0;
+        const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+        for (;;) {
+          const { value, done } = await rd.read(); if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i; while ((i = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, i); buf = buf.slice(i + 1);
+            if (line.startsWith('data: ')) { try { handle(JSON.parse(line.slice(6))); } catch {} }
+          }
+        }
+      } catch (e) { if (attempt > 2) S.errors.wiki = 'stream unavailable (' + e.message + '), retrying'; }
+      W.connected = false;
+      await new Promise(r => setTimeout(r, Math.min(30000, 2000 * (attempt + 1))));
+    }
+  })();
   setInterval(async () => {
     if (!W.pending.size) return;
     const evs = [...W.pending.values()].slice(0, 50);
@@ -730,7 +743,7 @@ async function suggest() {
   stopOrbit();
   if (!S.followNow) { S.followNow = true; S.playing = false; clearInterval(playTimer); syncNow(); renderScrub(); }
   const cand = S.stations.filter(s => s.lu && s.prof).map(s => ({ s, lv: liveFor(s) }))
-    .filter(x => x.lv && x.lv.ratio != null && x.lv.typ >= 0.03)
+    .filter(x => x.lv && x.lv.ratio != null && x.lv.typ >= 0.03 && (x.s.daily?.midweek || 0) >= 15000)
     .map(x => ({ ...x, good: x.s.lines.every(l => S.lineIndex[l]?.cls === 'good') }));
   let basis = 'live';
   let pool = cand.filter(x => x.good).sort((a, b) => a.lv.ratio - b.lv.ratio);
@@ -749,7 +762,7 @@ async function suggest() {
   else {
     try {
       const d = await gj(`https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&origin=*&list=geosearch&gscoord=${s.lat}|${s.lon}&gsradius=1500&gslimit=20`);
-      const g = d.query?.geosearch || []; const p = g[Math.floor(Math.random() * Math.min(8, g.length))];
+      const g = (d.query?.geosearch || []).filter(x => !/station|tube|railway|line\b|bus route/i.test(x.title)); const p = g[Math.floor(Math.random() * Math.min(8, g.length))];
       if (p) { cur = { o: { title: p.title, pos: [p.lon, p.lat] }, d: p.dist }; curTxt = `<li>Nearby on Wikipedia: <b><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g, '_'))}" target="_blank" rel="noopener">${esc(p.title)}</a></b> (${Math.round(p.dist)} m). No live London edits near here yet</li>`; }
     } catch (e) {}
   }
