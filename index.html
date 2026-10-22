@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Living London — the city, breathing in real time</title>
+<title>Living London — the city's pulse, curiosity and weather, live</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22%23ff3dbb%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -12,50 +12,66 @@
 </head>
 <body>
 <div id="map"></div>
+<div id="haze"></div>
+<canvas id="precip"></canvas>
 <div id="vignette"></div>
 
 <header id="brand" class="glass">
   <div class="title">LIVING<span>LONDON</span></div>
-  <div class="sub">the city, breathing in real time</div>
-  <div class="clock"><span id="clock">--:--</span> <small>London</small></div>
-  <div class="updated">last updated <b id="updated">--:--</b> <small>(London)</small>
-    <button id="refresh" title="Refresh all live feeds now"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" class="track"/><circle cx="18" cy="18" r="15" id="ring" class="ring"/></svg><span>↻</span></button>
+  <div class="sub">pulse · curiosity · weather — live</div>
+  <div class="updated"><span class="clock" id="clock">--:--</span> · last updated <b id="updated">--:--</b> <small>(London)</small>
+    <button id="refresh" title="Refresh live feeds now"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" class="track"/><circle cx="18" cy="18" r="15" id="ring" class="ring"/></svg><span>↻</span></button>
   </div>
+  <div id="wx" class="wx">weather loading…</div>
   <div id="health"></div>
 </header>
 
 <section id="pulse" class="glass">
-  <div class="stat"><b id="s-bikes">–</b><span>bikes docked</span></div>
-  <div class="stat e"><b id="s-ebikes">–</b><span>e-bikes</span></div>
-  <div class="stat"><b id="s-empty">–</b><span>empty docks</span></div>
-  <div class="stat"><b id="s-docks">–</b><span>stations</span></div>
-  <div class="stat d"><b id="s-delta">–</b><span>docks changed since last pull</span></div>
+  <div class="stat"><b id="s-live">–</b><span>stations with live crowding</span></div>
+  <div class="stat"><b id="s-busy">–</b><span id="s-busy-l">busiest now</span></div>
+  <div class="stat q"><b id="s-quiet">–</b><span>quietest vs usual (live)</span></div>
+  <div class="stat w"><b id="s-wiki">–</b><span id="s-wiki-l">London Wikipedia edits</span></div>
+  <div class="stat s"><b id="s-storm">–</b><span>storm risk</span></div>
 </section>
 
 <aside id="layers" class="glass">
   <h3>Layers</h3>
-  <label><input type="checkbox" id="L-bikes" checked> <i class="dot bike"></i> Santander bikes <em>3D columns</em></label>
-  <div class="seg" id="bikeMode">
-    <button data-m="ebike" class="on">e-bike mix</button><button data-m="fill">fullness</button>
-  </div>
+  <label><input type="checkbox" id="L-pulse" checked> <i class="dot pul"></i> The city's pulse <em>stations</em></label>
+  <label><input type="checkbox" id="L-wiki" checked> <i class="dot wik"></i> Where London is curious <em>Wikipedia</em></label>
   <label><input type="checkbox" id="L-tube" checked> <i class="dot tube"></i> Rail network <em>live status</em></label>
-  <label><input type="checkbox" id="L-stations" checked> <i class="dot stn"></i> Stations <em>click = arrivals</em></label>
   <label><input type="checkbox" id="L-air" checked> <i class="dot air"></i> Air quality <em>hourly index</em></label>
+  <label><input type="checkbox" id="L-weather" checked> <i class="dot wxd"></i> Weather atmosphere <em>live</em></label>
   <label><input type="checkbox" id="L-buildings" checked> <i class="dot bld"></i> 3D buildings</label>
+  <label><input type="checkbox" id="L-bikes"> <i class="dot bike"></i> Santander bikes <em>off by default</em></label>
   <div class="legend" id="legend"></div>
 </aside>
 
-<aside id="status" class="glass">
-  <h3>Line status <small id="st-summary"></small></h3>
-  <div id="lines"></div>
+<aside id="right">
+  <section id="status" class="glass">
+    <h3>Line status <small id="st-summary"></small></h3>
+    <div id="lines"></div>
+  </section>
+  <section id="curious" class="glass">
+    <h3>London is curious about <small id="wk-summary"></small></h3>
+    <div id="ticker"><p class="muted">listening to Wikipedia…</p></div>
+  </section>
 </aside>
 
-<div id="dock">
-  <button id="go" class="glow">✦ Where should I go<span class="nomob"> right now</span>?</button>
-  <button id="orbit" class="ghost" title="Slow cinematic orbit">◎<span class="nomob"> Ambient</span></button>
-  <button id="home" class="ghost" title="Back to the overview">⌂</button>
-  <button id="mLayers" class="ghost mob">☰</button>
-  <button id="mLines" class="ghost mob">Lines</button>
+<div id="bottom">
+  <div id="scrub" class="glass">
+    <button id="play" class="ic" title="Play a typical day">▶</button>
+    <select id="day" title="Day of week"></select>
+    <input id="slot" type="range" min="0" max="95" step="1">
+    <div id="tlabel"><b id="ttime">--:--</b><span id="tmode" class="tag">LIVE</span></div>
+    <button id="now" class="ic txt" title="Back to now">Now</button>
+  </div>
+  <div id="dock">
+    <button id="go" class="glow">✦ Where should I go<span class="nomob"> right now</span>?</button>
+    <button id="orbit" class="ghost" title="Ambient: slow orbit that drifts to whatever London is reading about">◎<span class="nomob"> Ambient</span></button>
+    <button id="home" class="ghost" title="Back to the overview">⌂</button>
+    <button id="mLayers" class="ghost mob">☰</button>
+    <button id="mRight" class="ghost mob">Live</button>
+  </div>
 </div>
 
 <div id="card" class="glass hidden"><button class="x" id="cardx">×</button><div id="cardbody"></div></div>
