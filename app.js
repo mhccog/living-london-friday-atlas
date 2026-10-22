@@ -496,4 +496,5 @@ function frame(now) {
 requestAnimationFrame(frame);
 refresh(true);
 window.__LL = S; // for debugging/tests
+S.debug = { map, api, showStation, stations: () => stations };
 })();
