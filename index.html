@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Living London — the city, breathing in real time</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22%23ff3dbb%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+<div id="vignette"></div>
+
+<header id="brand" class="glass">
+  <div class="title">LIVING<span>LONDON</span></div>
+  <div class="sub">the city, breathing in real time</div>
+  <div class="clock"><span id="clock">--:--</span> <small>London</small></div>
+  <div class="updated">last updated <b id="updated">--:--</b> <small>(London)</small>
+    <button id="refresh" title="Refresh all live feeds now"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" class="track"/><circle cx="18" cy="18" r="15" id="ring" class="ring"/></svg><span>↻</span></button>
+  </div>
+  <div id="health"></div>
+</header>
+
+<section id="pulse" class="glass">
+  <div class="stat"><b id="s-bikes">–</b><span>bikes docked</span></div>
+  <div class="stat e"><b id="s-ebikes">–</b><span>e-bikes</span></div>
+  <div class="stat"><b id="s-empty">–</b><span>empty docks</span></div>
+  <div class="stat"><b id="s-docks">–</b><span>stations</span></div>
+  <div class="stat d"><b id="s-delta">–</b><span>docks changed since last pull</span></div>
+</section>
+
+<aside id="layers" class="glass">
+  <h3>Layers</h3>
+  <label><input type="checkbox" id="L-bikes" checked> <i class="dot bike"></i> Santander bikes <em>3D columns</em></label>
+  <div class="seg" id="bikeMode">
+    <button data-m="ebike" class="on">e-bike mix</button><button data-m="fill">fullness</button>
+  </div>
+  <label><input type="checkbox" id="L-tube" checked> <i class="dot tube"></i> Rail network <em>live status</em></label>
+  <label><input type="checkbox" id="L-stations" checked> <i class="dot stn"></i> Stations <em>click = arrivals</em></label>
+  <label><input type="checkbox" id="L-air" checked> <i class="dot air"></i> Air quality <em>hourly index</em></label>
+  <label><input type="checkbox" id="L-buildings" checked> <i class="dot bld"></i> 3D buildings</label>
+  <div class="legend" id="legend"></div>
+</aside>
+
+<aside id="status" class="glass">
+  <h3>Line status <small id="st-summary"></small></h3>
+  <div id="lines"></div>
+</aside>
+
+<div id="dock">
+  <button id="go" class="glow">✦ Where should I go<span class="nomob"> right now</span>?</button>
+  <button id="orbit" class="ghost" title="Slow cinematic orbit">◎<span class="nomob"> Ambient</span></button>
+  <button id="home" class="ghost" title="Back to the overview">⌂</button>
+  <button id="mLayers" class="ghost mob">☰</button>
+  <button id="mLines" class="ghost mob">Lines</button>
+</div>
+
+<div id="card" class="glass hidden"><button class="x" id="cardx">×</button><div id="cardbody"></div></div>
+<div id="tip" class="hidden"></div>
+<div id="toast" class="hidden"></div>
+<div id="loading"><div class="orb"></div><p>waking the city…</p></div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/deck.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
