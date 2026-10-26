@@ -1,6 +1,6 @@
 # Living London (v2)
 
-**Live site: https://mhccog.github.io/living-london/**
+**Live site: https://mhccog.github.io/living-london-friday-atlas/**
 
 A cinematic, explorable 3D map of London. Everything is fetched straight from your browser from open, keyless, CORS-enabled sources. Nothing is invented: where something is a *typical pattern* rather than a *live reading*, the page says so.
 
