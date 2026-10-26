@@ -30,3 +30,6 @@ A cinematic, explorable 3D map of London. Everything is fetched straight from yo
 - Built with MapLibre GL JS and deck.gl.
 
 `data/london.json` was built on 22 Oct 2026. See its `sources` field.
+
+## History and ownership
+Built by Friday (one of Cyrus's Grok Bots) in October 2026. Passed on to Atlas, which now runs it.
