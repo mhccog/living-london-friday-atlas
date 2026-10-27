@@ -146,3 +146,22 @@ a{color:var(--cy)}
   .maplibregl-ctrl-bottom-right{display:none}
   #toast{top:auto;bottom:240px}
 }
+
+/* ---- mode switch (shared by Living and Business) ---- */
+#modes{position:absolute;z-index:6;top:14px;left:50%;transform:translateX(-50%);display:flex;padding:4px;gap:4px;border-radius:99px}
+#modes button{font:inherit;cursor:pointer;border:1px solid transparent;background:none;color:var(--mut);padding:8px 18px;border-radius:99px;font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;display:flex;align-items:center;gap:7px;white-space:nowrap;transition:all .25s}
+#modes button small{font-weight:500;letter-spacing:.04em;text-transform:none;font-size:10.5px;opacity:.7}
+#modes button .mi{font-style:normal}
+#modes button:hover{color:var(--fg)}
+body.mode-liv #modes button[data-mode=living].on{color:#fff;background:linear-gradient(90deg,rgba(46,242,255,.3),rgba(255,61,187,.35));border-color:rgba(255,255,255,.3);box-shadow:0 0 22px rgba(255,61,187,.35)}
+body.mode-biz #modes button[data-mode=business].on{color:#0b0d12;background:linear-gradient(90deg,#f5c451,#2fe3a0);border-color:rgba(255,255,255,.4);box-shadow:0 0 22px rgba(245,196,81,.4)}
+body.mode-biz #modes button[data-mode=business].on small{opacity:.8}
+body.mode-liv #pulse{top:72px}
+body.mode-biz #brand,body.mode-biz #pulse,body.mode-biz #layers,body.mode-biz #right,body.mode-biz #bottom,body.mode-biz #haze,body.mode-biz #precip,body.mode-biz #toast{display:none!important}
+body.mode-liv #biz{display:none}
+@media (max-width:1250px){body.mode-liv #pulse{top:auto}}
+@media (max-width:760px){
+  #modes{top:8px;padding:3px}#modes button{padding:7px 12px;font-size:11.5px}#modes button small{display:none}
+  body.mode-liv #brand{top:58px}
+  body.mode-liv .updated{top:62px}
+}

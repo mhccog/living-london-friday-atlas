@@ -1,0 +1,1 @@
+{"status":"needs_key","generated":"2026-10-27T03:28:43+00:00","note":"Registrations after the monthly snapshot (and the live stream) need a free Companies House API key (developer.company-information.service.gov.uk). Wired and waiting: set COMPANIES_HOUSE_API_KEY as a GitHub Actions secret.","url":"https://developer.company-information.service.gov.uk/"}

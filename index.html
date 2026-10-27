@@ -9,12 +9,34 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="business.css">
 </head>
 <body>
 <div id="map"></div>
 <div id="haze"></div>
 <canvas id="precip"></canvas>
 <div id="vignette"></div>
+
+<div id="modes" class="glass" role="tablist" aria-label="Mode">
+  <button data-mode="living" role="tab"><i class="mi">✦</i> Living <small>city pulse</small></button>
+  <button data-mode="business" role="tab"><i class="mi">▮</i> Business <small>London, Inc.</small></button>
+</div>
+
+<div id="biz">
+  <header id="bz-brand" class="bz"></header>
+  <section id="bz-kpi" class="bz"></section>
+  <aside id="bz-layers" class="bz"></aside>
+  <aside id="bz-right" class="bz"></aside>
+  <div id="bz-bottom">
+    <div id="bz-scrub" class="bz"></div>
+    <div id="bz-dock">
+      <button id="bz-go" class="bz-glow">▮ Where's the action<span class="nomob"> right now</span>?</button>
+      <button id="bz-home" class="bz-ghost" title="Back to the overview">⌂</button>
+      <button id="bz-mL" class="bz-ghost mob">☰</button>
+      <button id="bz-mR" class="bz-ghost mob">Data</button>
+    </div>
+  </div>
+</div>
 
 <header id="brand" class="glass">
   <div class="title">LIVING<span>LONDON</span></div>
@@ -81,6 +103,7 @@
 
 <script src="vendor/maplibre-gl.js"></script>
 <script src="vendor/deck.min.js"></script>
+<script src="business.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

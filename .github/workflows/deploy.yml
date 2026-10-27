@@ -1,0 +1,56 @@
+name: Build business data and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '25 5 * * *'   # daily, 05:25 UTC: refresh Business-mode data (Gazette, contracts, sales, jobs; monthly Companies House snapshot)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Refresh Business-mode data
+        # If this step fails or a source is down, the committed seed data is deployed instead and the page marks it stale.
+        continue-on-error: true
+        env:
+          # Optional free keys. Add them as repository secrets to switch the matching layer from "needs key" to live.
+          COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          BIZ_WORK: ${{ runner.temp }}/biz
+        run: python3 scripts/build_business.py
+      - name: Assemble site
+        run: |
+          mkdir _site
+          cp -r index.html app.js business.js style.css business.css vendor data .nojekyll _site/
+          ls -la _site/data/business
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

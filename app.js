@@ -1,4 +1,4 @@
-/* Living London v2 — the city's pulse (TfL crowding), where London is curious (Wikipedia), and live weather.
+/* Living London v3 (Living mode + Business mode; business.js holds Business mode) — the city's pulse (TfL crowding), where London is curious (Wikipedia), and live weather.
    Everything is fetched from the browser (all sources send CORS headers). Nothing is invented: where a value is a
    typical pattern rather than a live reading, the page says so. */
 (() => {
@@ -6,6 +6,7 @@ const { MapboxOverlay, ColumnLayer, PathLayer, ScatterplotLayer, TripsLayer, Tex
 const TZ = 'Europe/London';
 const HOME = { center: [-0.105, 51.508], zoom: 11.9, pitch: 58, bearing: -17 };
 const REFRESH_MS = 60000;
+const DEFAULT_MODE = 'business';
 const DAYS = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
 const DAYNAME = { MON:'Monday', TUE:'Tuesday', WED:'Wednesday', THU:'Thursday', FRI:'Friday', SAT:'Saturday', SUN:'Sunday' };
 const DTYPE = { MON:'mon', TUE:'midweek', WED:'midweek', THU:'midweek', FRI:'fri', SAT:'sat', SUN:'sun' };
@@ -49,27 +50,39 @@ const S = {
   crowd: new Map(), crowdChecked: 0, crowdErrors: 0, crowdBackoff: 0,
   wiki: { bursts: [], seeds: [], seen: 0, london: 0, since: Date.now(), connected: false, lookups: 0, cache: new Map(), pending: new Map() },
   errors: {}, show: { pulse: true, wiki: true, tube: true, air: true, weather: true, bikes: false },
+  mode: 'living', livingStarted: false,
   day: null, slot: 0, followNow: true, playing: false,
   selectedLine: null, focus: null, arc: null, orbit: false, lastUpdate: null, nextAt: 0,
 };
 
 // ---------- map ----------
 const map = new maplibregl.Map({ container: 'map', style: 'https://tiles.openfreemap.org/styles/dark', ...HOME, maxPitch: 80, antialias: true, attributionControl: false });
-map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: 'Powered by TfL Open Data · TfL Annual Station Counts 2025 · Wikipedia/Wikimedia EventStreams · Weather: Open-Meteo.com (CC BY 4.0) · Air: London Air (Imperial College ERG)' }));
+map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: 'Powered by TfL Open Data · TfL Annual Station Counts 2025 · Wikipedia/Wikimedia EventStreams · Weather: Open-Meteo.com (CC BY 4.0) · Air: London Air (Imperial College ERG) · Business: Companies House, The Gazette, Contracts Finder, Find a Tender, ONS/Nomis (OGL v3), Contains HM Land Registry data © Crown copyright 2026, postcodes.io' }));
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
 map.on('styleimagemissing', e => { if (!map.hasImage(e.id)) map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) }); });
 let mapReady = false;
 map.on('load', () => {
-  try { map.setPaintProperty('background', 'background-color', '#05060c'); map.setPaintProperty('water', 'fill-color', '#0a1530'); } catch (e) {}
   map.addLayer({ id: '3d-buildings', source: 'openmaptiles', 'source-layer': 'building', type: 'fill-extrusion', minzoom: 12.5,
     paint: {
       'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 8], 0, '#11131f', 40, '#1d2135', 120, '#2c3355', 250, '#3f3a70'],
       'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, ['coalesce', ['get', 'render_height'], 8]],
       'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.8 } });
-  mapReady = true; applyAtmosphere();
+  mapReady = true; paintBase(); applyAtmosphere();
 });
 const overlay = new MapboxOverlay({ interleaved: false, layers: [], getCursor: ({ isHovering }) => isHovering ? 'pointer' : 'grab' });
 map.addControl(overlay);
+
+// basemap colours per mode (Living = neon night, Business = ink + gold)
+function paintBase() {
+  const biz = S.mode === 'business';
+  try { map.setPaintProperty('background', 'background-color', biz ? '#06080d' : '#05060c'); map.setPaintProperty('water', 'fill-color', biz ? '#0a1a2c' : '#0a1530'); } catch (e) {}
+  try {
+    map.setPaintProperty('3d-buildings', 'fill-extrusion-color', biz
+      ? ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 8], 0, '#10141b', 40, '#192130', 120, '#26324a', 250, '#3a4560']
+      : ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 8], 0, '#11131f', 40, '#1d2135', 120, '#2c3355', 250, '#3f3a70']);
+    map.setPaintProperty('3d-buildings', 'fill-extrusion-opacity', biz ? 0.62 : 0.8);
+  } catch (e) {}
+}
 
 // ---------- static network + typical crowding (built once from TfL; see data/london.json "sources") ----------
 let boundaryRings = [];
@@ -162,6 +175,7 @@ function airColour(i) { if (i <= 3) return [61,255,162]; if (i <= 6) return [255
 
 // ---------- layers ----------
 function layers(t) {
+  if (S.mode === 'business' && window.BIZ) return window.BIZ.layers(t, map.getZoom());
   const L = [], sel = S.selectedLine, dimFor = id => sel && sel !== id ? 0.12 : 1;
   const zoom = map.getZoom();
   if (S.show.air && S.air) {
@@ -260,13 +274,14 @@ function wikiTip(o) {
 function relDay(t) { const h = (Date.now() - t) / 3600e3; return h < 1 ? `${Math.max(1, Math.round(h * 60))} min ago` : `${Math.round(h)} h ago`; }
 overlay.setProps({
   onHover: info => {
-    const tip = $('tip'), h = info.object ? tipHTML(info) : null;
+    const tip = $('tip'), h = info.object ? (S.mode === 'business' && window.BIZ ? window.BIZ.tip(info) : tipHTML(info)) : null;
     if (!h) { tip.classList.add('hidden'); return; }
     tip.innerHTML = h; tip.classList.remove('hidden');
     tip.style.left = Math.min(info.x + 14, innerWidth - 300) + 'px'; tip.style.top = Math.min(info.y + 14, innerHeight - 140) + 'px';
   },
   onClick: info => {
     if (!info.object) return;
+    if (S.mode === 'business' && window.BIZ) { window.BIZ.click(info); return; }
     stopOrbit();
     const o = info.object, id = info.layer.id;
     if (id === 'pulse-col' || id === 'pulse-daily') showStation(o.s);
@@ -401,6 +416,7 @@ function renderHealth() {
   }).join('') + `<span class="pill info" title="Blitzortung's terms don't allow third-party use of its data, and no open, keyless strike feed exists, so strikes are not shown">⚡ live strikes n/a</span>`;
   const down = Object.entries(S.errors).filter(([, v]) => v);
   const t = $('toast');
+  if (S.mode === 'business') { t.classList.add('hidden'); return; }
   if (down.length) { t.innerHTML = `⚠ Live feed problem — ${down.map(([k, v]) => `<b>${esc({ net: 'typical crowding data', crowd: 'TfL live crowding', status: 'TfL line status', wiki: 'Wikipedia stream', air: 'London Air', weather: 'Open-Meteo weather', bikes: 'TfL bikes' }[k] || k)}</b>: ${esc(v)}`).join(' · ')}. Nothing is invented: affected layers are hidden or stale.`; t.classList.remove('hidden'); }
   else t.classList.add('hidden');
 }
@@ -450,7 +466,8 @@ async function loadBikes() {
 // live crowding: polite batched sweep over Underground stations, busiest first; restarts every ~10 min
 let crowdQueue = [], crowdTimer = null;
 function crowdSweep() {
-  crowdQueue = S.stations.filter(s => s.lu && s.prof).sort((a, b) => (b.daily?.midweek || 0) - (a.daily?.midweek || 0)).map(s => s.lu);
+  const pri = new Set(window.BIZ?.officeStationIds?.() || []);
+  crowdQueue = S.stations.filter(s => s.lu && s.prof).sort((a, b) => (pri.has(b.id) - pri.has(a.id)) || ((b.daily?.midweek || 0) - (a.daily?.midweek || 0))).map(s => s.lu);
 }
 async function crowdTick() {
   if (document.hidden || Date.now() < S.crowdBackoff) return;
@@ -622,6 +639,14 @@ function renderWeatherChip() {
 const rainCanvas = $('precip'), rctx = rainCanvas.getContext('2d');
 let drops = [], precipMode = null;
 function applyAtmosphere() {
+  if (S.mode === 'business') {
+    if (mapReady) {
+      try { map.setSky({ 'sky-color': '#05070c', 'horizon-color': '#101a2b', 'fog-color': '#070b13', 'sky-horizon-blend': 0.5, 'horizon-fog-blend': 0.8, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0.4 }); } catch (e) {}
+      try { map.setLight({ anchor: 'map', color: '#ffe9c0', intensity: 0.32, position: [1.5, 200, 40] }); } catch (e) {}
+    }
+    $('haze').style.opacity = 0; precipMode = null; drops = [];
+    return;
+  }
   renderWeatherChip();
   const w = S.weather, on = S.show.weather;
   const el = sunElevation(Date.now());
@@ -704,11 +729,13 @@ async function refresh(initial, force) {
   if (S.followNow) syncNow();
   const slow = initial || force || Date.now() - lastSlow > 10 * 60e3; // air (hourly bulletin) and weather (15-min) every 10 min
   if (slow) lastSlow = Date.now();
-  await Promise.allSettled([loadStatus(), slow ? loadAir() : null, slow ? loadWeather() : null, S.show.bikes ? loadBikes() : null]);
+  const liv = S.mode === 'living';
+  await Promise.allSettled([loadStatus(), slow && liv ? loadAir() : null, slow && liv ? loadWeather() : null, S.show.bikes && liv ? loadBikes() : null]);
   S.lastUpdate = new Date(); S.nextAt = Date.now() + REFRESH_MS;
   $('updated').textContent = fmtTime(S.lastUpdate);
   $('refresh').classList.remove('spin');
   renderStatus(); renderStats(); renderHealth(); renderScrub(); renderWeatherChip();
+  if (window.BIZ) window.BIZ.refreshed();
 }
 $('refresh').onclick = () => { crowdSweep(); refresh(false, true); };
 setInterval(() => {
@@ -797,12 +824,43 @@ function frame(now) {
 // ---------- boot ----------
 (async () => {
   syncNow(); renderScrub(); renderLegend();
+  const q = new URLSearchParams(location.search).get('mode'); let saved = null; try { saved = localStorage.getItem('ll_mode'); } catch (e) {}
+  const m0 = ['living', 'business'].includes(q) ? q : ['living', 'business'].includes(saved) ? saved : DEFAULT_MODE;
+  applyModeClass(m0);
   await loadStatic();
+  if (window.BIZ) window.BIZ.init(LL);
   await refresh(true);
   $('loading').classList.add('fade'); setTimeout(() => $('loading').remove(), 1100);
   requestAnimationFrame(frame);
   if (S.net) startCrowd();
-  startWiki(); seedRecent().then(seedWiki);
+  if (S.mode === 'living') startLiving();
+  if (S.mode === 'business' && window.BIZ) window.BIZ.enter(true);
   setInterval(applyAtmosphere, 5 * 60e3); // sun moves
 })();
+
+// ---------- modes ----------
+function startLiving() {
+  if (S.livingStarted) return; S.livingStarted = true;
+  startWiki(); seedRecent().then(seedWiki);
+}
+function applyModeClass(m) {
+  S.mode = m;
+  document.body.classList.toggle('mode-biz', m === 'business'); document.body.classList.toggle('mode-liv', m === 'living');
+  document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  document.title = m === 'business' ? 'London, Inc. — the city at work, on live public business data' : "Living London — the city's pulse, curiosity and weather, live";
+  if (mapReady) paintBase();
+}
+function setMode(m) {
+  if (m === S.mode) return;
+  try { localStorage.setItem('ll_mode', m); } catch (e) {}
+  $('card').classList.add('hidden'); $('tip').classList.add('hidden'); S.focus = null; S.arc = null; stopOrbit(); closeSheets();
+  if (S.mode === 'business' && window.BIZ) window.BIZ.leave();
+  applyModeClass(m);
+  applyAtmosphere();
+  if (m === 'living') { startLiving(); refresh(false, true); renderHealth(); map.flyTo({ ...HOME, duration: 2400 }); }
+  else if (window.BIZ) { window.BIZ.enter(false); }
+}
+document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+const LL = { map, overlay, S, $, esc, n, hex, mix, metres, fmtTime, fmtTimeS, gj, HOME, DAYS, DAYNAME, DTYPE, slotLabel, londonNow, busy, liveFor, busiestSlot, openCard, closeSheets, inLondon, setMode, startLiving, refresh };
+window.LL = LL;
 })();
